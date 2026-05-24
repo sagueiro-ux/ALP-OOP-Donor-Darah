@@ -36,8 +36,8 @@ public class AplikasiPMI extends JFrame {
     private static final Color BORDER_WARNA = new Color(215, 175, 168);
     private static final Color HIJAU        = new Color(22, 120, 55);
 
-    private JPanel cardPanel;
-    private CardLayout cardLayout;
+    private final JPanel cardPanel;
+    private final CardLayout cardLayout;
     
     private JLabel labelSambutan;
     private JLabel labelRoleBadge;
@@ -52,6 +52,9 @@ public class AplikasiPMI extends JFrame {
 
     private User currentUser;
     private String currentUserId = ""; 
+    
+    // Sistem Antrian Pendonor
+    private final AntriPendonor antriPendonor = new AntriPendonor();
 
     public AplikasiPMI() {
         setTitle("PMI — Sistem Informasi Donor Darah Indonesia (File & CRUD)");
@@ -369,8 +372,11 @@ public class AplikasiPMI extends JFrame {
                     labelWarningNIK.setText("NIK valid (16 digit)");
                 }
             }
+            @Override
             public void insertUpdate(javax.swing.event.DocumentEvent e)  { cekNIK(); }
+            @Override
             public void removeUpdate(javax.swing.event.DocumentEvent e)  { cekNIK(); }
+            @Override
             public void changedUpdate(javax.swing.event.DocumentEvent e) { cekNIK(); }
         });
 
@@ -693,10 +699,18 @@ public class AplikasiPMI extends JFrame {
         int countPendonor = 0;
         for (String r : dataRole.values()) if ("PENDONOR".equals(r)) countPendonor++;
 
+        // Panel Tab untuk Monitoring dan Antrian
+        JTabbedPane tabPane = new JTabbedPane();
+        tabPane.setOpaque(false);
+        
+        // Tab 1: Monitoring Validitas Pendonor
+        JPanel tabMonitoring = new JPanel(new BorderLayout(10, 10));
+        tabMonitoring.setOpaque(false);
+        
         JLabel infoPetugas = new JLabel("Monitoring Validitas Pendonor Terdaftar (Total Pendonor: " + countPendonor + ")", SwingConstants.CENTER);
         infoPetugas.setFont(font("Arial", Font.BOLD, 13));
         infoPetugas.setForeground(MERAH_TUA);
-        panel.add(infoPetugas, BorderLayout.NORTH);
+        tabMonitoring.add(infoPetugas, BorderLayout.NORTH);
 
         DefaultListModel<String> listModel = new DefaultListModel<>();
         for (String userId : dataPengguna.keySet()) {
@@ -735,7 +749,7 @@ public class AplikasiPMI extends JFrame {
         });
 
         JScrollPane jsp = new JScrollPane(listPendonor);
-        panel.add(jsp, BorderLayout.CENTER);
+        tabMonitoring.add(jsp, BorderLayout.CENTER);
 
         JPanel panelAksi = new JPanel(new GridLayout(1, 3, 10, 10));
         panelAksi.setOpaque(false);
@@ -812,7 +826,16 @@ public class AplikasiPMI extends JFrame {
         panelAksi.add(btnCekHb);
         panelAksi.add(btnEditHb);
         panelAksi.add(btnVerifikasi);
-        panel.add(panelAksi, BorderLayout.SOUTH);
+        tabMonitoring.add(panelAksi, BorderLayout.SOUTH);
+        
+        // Tab 2: Sistem Antrian Pendonor
+        JPanel tabAntrian = buatTabAntrian(petugas);
+        
+        // Tambahkan kedua tab ke TabbedPane
+        tabPane.addTab("Monitoring Pendonor", tabMonitoring);
+        tabPane.addTab("Sistem Antrian", tabAntrian);
+        
+        panel.add(tabPane, BorderLayout.CENTER);
 
         return panel;
     }
@@ -927,16 +950,10 @@ public class AplikasiPMI extends JFrame {
         JLabel l = new JLabel(teks); l.setFont(font("Arial", Font.BOLD, 12)); l.setForeground(MERAH_TUA); return l;
     }
 
-    private JLabel labelKecil(String teks) {
-        JLabel l = new JLabel(teks); l.setFont(font("Arial", Font.ITALIC, 11)); l.setForeground(ABU_HANGAT); return l;
-    }
-
     private JLabel labelPesan() {
         JLabel l = new JLabel(" "); l.setFont(font("Arial", Font.BOLD, 12)); l.setForeground(MERAH_PMI);
         l.setAlignmentX(Component.CENTER_ALIGNMENT); return l;
     }
-
-    private JLabel labelTengah(String teks, Font f) { return labelTengah(teks, f, GELAP); }
 
     private JLabel labelTengah(String teks, Font f, Color warna) {
         JLabel l = new JLabel(teks, SwingConstants.CENTER); l.setFont(f); l.setForeground(warna);
@@ -945,11 +962,6 @@ public class AplikasiPMI extends JFrame {
 
     private JPanel padded(JComponent c) {
         JPanel p = new JPanel(); p.setLayout(new BoxLayout(p, BoxLayout.X_AXIS));
-        p.setOpaque(false); p.setBorder(new EmptyBorder(0, 24, 0, 24)); p.add(c); return p;
-    }
-
-    private JPanel paddedKiri(JComponent c) {
-        JPanel p = new JPanel(new FlowLayout(FlowLayout.LEFT, 0, 0));
         p.setOpaque(false); p.setBorder(new EmptyBorder(0, 24, 0, 24)); p.add(c); return p;
     }
 
@@ -988,6 +1000,159 @@ public class AplikasiPMI extends JFrame {
 
     private Font font(String nama, int gaya, int ukuran) { return new Font(nama, gaya, ukuran); }
 
+    //Tab Antrian Pendonor untuk Petugas
+    private JPanel buatTabAntrian(Petugas petugas) {
+        JPanel tabAntrian = new JPanel(new BorderLayout(10, 10));
+        tabAntrian.setOpaque(false);
+        tabAntrian.setBorder(new EmptyBorder(10, 10, 10, 10));
+
+        // Panel Judul dan Info Antrian
+        JPanel panelInfo = new JPanel(new BorderLayout());
+        panelInfo.setOpaque(false);
+        JLabel judulAntrian = new JLabel("SISTEM ANTRIAN PENDONOR DARAH", SwingConstants.CENTER);
+        judulAntrian.setFont(font("Arial", Font.BOLD, 14));
+        judulAntrian.setForeground(MERAH_PMI);
+        panelInfo.add(judulAntrian, BorderLayout.NORTH);
+
+        JLabel infoAntrian = new JLabel("Total dalam Antrian: " + antriPendonor.getTotalAntri() + " pendonor", SwingConstants.CENTER);
+        infoAntrian.setFont(font("Arial", Font.BOLD, 12));
+        infoAntrian.setForeground(MERAH_TUA);
+        panelInfo.add(infoAntrian, BorderLayout.SOUTH);
+        tabAntrian.add(panelInfo, BorderLayout.NORTH);
+
+        // Panel Daftar Antrian dengan Scroll
+        JPanel panelDaftar = new JPanel(new BorderLayout());
+        panelDaftar.setOpaque(false);
+
+        DefaultListModel<String> modelAntrian = new DefaultListModel<>();
+        String[] daftarAntrian = antriPendonor.formatDaftarAntriUntukUI();
+        for (String item : daftarAntrian) {
+            modelAntrian.addElement(item);
+        }
+
+        JList<String> listAntrian = new JList<>(modelAntrian);
+        listAntrian.setFont(font("Arial", Font.PLAIN, 12));
+        listAntrian.setCellRenderer(new DefaultListCellRenderer() {
+            @Override
+            public Component getListCellRendererComponent(JList<?> list, Object value, int index, boolean isSelected, boolean cellHasFocus) {
+                JLabel label = (JLabel) super.getListCellRendererComponent(list, value, index, isSelected, cellHasFocus);
+                String text = value.toString();
+                label.setOpaque(true);
+                
+                if (isSelected) {
+                    label.setBackground(new Color(220, 235, 255));
+                    label.setForeground(GELAP);
+                } else if (text.contains("🩸")) {
+                    // Sedang diproses
+                    label.setBackground(new Color(255, 230, 200));
+                    label.setForeground(MERAH_PMI);
+                } else if (text.contains("✓")) {
+                    // Selesai
+                    label.setBackground(new Color(220, 255, 220));
+                    label.setForeground(HIJAU);
+                } else {
+                    // Menunggu
+                    label.setBackground(new Color(255, 250, 240));
+                    label.setForeground(GELAP);
+                }
+                return label;
+            }
+        });
+
+        JScrollPane scrollAntrian = new JScrollPane(listAntrian);
+        scrollAntrian.setPreferredSize(new Dimension(600, 200));
+        panelDaftar.add(scrollAntrian, BorderLayout.CENTER);
+        tabAntrian.add(panelDaftar, BorderLayout.CENTER);
+
+        // Panel Aksi Antrian
+        JPanel panelAksiAntrian = new JPanel(new GridLayout(2, 2, 10, 10));
+        panelAksiAntrian.setOpaque(false);
+        panelAksiAntrian.setBorder(new EmptyBorder(10, 0, 0, 0));
+
+        JButton btnTerimaAntrian = new JButton("Terima & Proses");
+        btnTerimaAntrian.setFont(font("Arial", Font.BOLD, 12));
+        btnTerimaAntrian.setForeground(HIJAU);
+        btnTerimaAntrian.setBackground(new Color(220, 255, 220));
+        btnTerimaAntrian.addActionListener(e -> {
+            NodeAntri pendonorDepan = antriPendonor.lihatDepan();
+            if (pendonorDepan == null) {
+                JOptionPane.showMessageDialog(this, "Antrian kosong. Tidak ada pendonor yang dapat diproses.", "Info Antrian", JOptionPane.INFORMATION_MESSAGE);
+            } else {
+                String msg = "Pendonor:\n" +
+                        "ID: " + pendonorDepan.getIdPendonor() + "\n" +
+                        "Nama: " + pendonorDepan.getNamaPendonor() + "\n" +
+                        "Golongan: " + pendonorDepan.getGolonganDarah();
+                JOptionPane.showMessageDialog(this, msg, "Pendonor Siap Diproses", JOptionPane.INFORMATION_MESSAGE);
+                antriPendonor.tandaiSedangDiproses(pendonorDepan.getIdPendonor());
+                modelAntrian.clear();
+                for (String item : antriPendonor.formatDaftarAntriUntukUI()) {
+                    modelAntrian.addElement(item);
+                }
+                infoAntrian.setText("Total dalam Antrian: " + antriPendonor.getTotalAntri() + " pendonor");
+            }
+        });
+        panelAksiAntrian.add(btnTerimaAntrian);
+
+        JButton btnSelesaiAntrian = new JButton("Selesai Donor");
+        btnSelesaiAntrian.setFont(font("Arial", Font.BOLD, 12));
+        btnSelesaiAntrian.setForeground(new Color(22, 120, 55));
+        btnSelesaiAntrian.setBackground(new Color(238, 255, 238));
+        btnSelesaiAntrian.addActionListener(e -> {
+            NodeAntri pendonorDepan = antriPendonor.lihatDepan();
+            if (pendonorDepan == null) {
+                JOptionPane.showMessageDialog(this, "Antrian kosong.", "Info Antrian", JOptionPane.INFORMATION_MESSAGE);
+            } else if ("SEDANG_DIPROSES".equals(pendonorDepan.getStatusAntri())) {
+                antriPendonor.tandaiSelesai(pendonorDepan.getIdPendonor());
+                antriPendonor.hapusAntri();
+                modelAntrian.clear();
+                for (String item : antriPendonor.formatDaftarAntriUntukUI()) {
+                    modelAntrian.addElement(item);
+                }
+                infoAntrian.setText("Total dalam Antrian: " + antriPendonor.getTotalAntri() + " pendonor");
+                JOptionPane.showMessageDialog(this, "Pendonor " + pendonorDepan.getNamaPendonor() + " berhasil menyelesaikan donor darah!", "Sukses", JOptionPane.INFORMATION_MESSAGE);
+            } else {
+                JOptionPane.showMessageDialog(this, "Pendonor belum dalam status 'SEDANG DIPROSES'.", "Peringatan", JOptionPane.WARNING_MESSAGE);
+            }
+        });
+        panelAksiAntrian.add(btnSelesaiAntrian);
+
+        JButton btnLihatPosisi = new JButton("Cari Posisi Pendonor");
+        btnLihatPosisi.setFont(font("Arial", Font.BOLD, 12));
+        btnLihatPosisi.setForeground(MERAH_TUA);
+        btnLihatPosisi.setBackground(new Color(255, 238, 235));
+        btnLihatPosisi.addActionListener(e -> {
+            String idCari = JOptionPane.showInputDialog(this, "Masukkan ID Pendonor:");
+            if (idCari != null && !idCari.isEmpty()) {
+                int posisi = antriPendonor.getUrutanPendonor(idCari);
+                if (posisi > 0) {
+                    JOptionPane.showMessageDialog(this, "ID: " + idCari + "\nPosisi Antrian: " + posisi, "Posisi Pendonor", JOptionPane.INFORMATION_MESSAGE);
+                } else {
+                    JOptionPane.showMessageDialog(this, "ID " + idCari + " tidak ditemukan dalam antrian.", "Tidak Ditemukan", JOptionPane.WARNING_MESSAGE);
+                }
+            }
+        });
+        panelAksiAntrian.add(btnLihatPosisi);
+
+        JButton btnKosongkanAntrian = new JButton("Kosongkan Antrian");
+        btnKosongkanAntrian.setFont(font("Arial", Font.BOLD, 12));
+        btnKosongkanAntrian.setForeground(new Color(200, 50, 0));
+        btnKosongkanAntrian.setBackground(new Color(255, 225, 225));
+        btnKosongkanAntrian.addActionListener(e -> {
+            int konfirmasi = JOptionPane.showConfirmDialog(this, "Apakah Anda yakin ingin mengosongkan seluruh antrian? ⚠️", "Konfirmasi", JOptionPane.YES_NO_OPTION);
+            if (konfirmasi == JOptionPane.YES_OPTION) {
+                antriPendonor.kosongkanAntri();
+                modelAntrian.clear();
+                modelAntrian.addElement("--- Antrian Kosong ---");
+                infoAntrian.setText("Total dalam Antrian: 0 pendonor");
+                JOptionPane.showMessageDialog(this, "Antrian telah dikosongkan.", "Sukses", JOptionPane.INFORMATION_MESSAGE);
+            }
+        });
+        panelAksiAntrian.add(btnKosongkanAntrian);
+
+        tabAntrian.add(panelAksiAntrian, BorderLayout.SOUTH);
+        return tabAntrian;
+    }
+
     class PanelLatar extends JPanel {
         @Override protected void paintComponent(Graphics g) {
             Graphics2D g2 = (Graphics2D) g.create();
@@ -1007,6 +1172,6 @@ public class AplikasiPMI extends JFrame {
 
     public static void main(String[] args) {
         try { UIManager.setLookAndFeel(UIManager.getSystemLookAndFeelClassName()); } catch (Exception ignored) {}
-        SwingUtilities.invokeLater(() -> { new AplikasiPMI().setVisible(true); });
+        SwingUtilities.invokeLater(() -> { new AplikasiPMI().setVisible(true);});
     }
 }
